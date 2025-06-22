@@ -935,7 +935,7 @@ const confirmIcon = (base64Data: string) => {
     const image = new Image()
     image.src = base64Data
     image.onload = () => {
-        roundIcon.value = cropImageToRound(image)
+        roundIcon.value = cropImageToRound(image, 40)
     }
 }
 
@@ -1642,16 +1642,38 @@ const updateTauriConfig = async () => {
     }
 }
 
+listen('local-progress', (event: any) => {
+    console.log(`local-progress--- ${event.payload}`)
+})
+
 // local publish
 const easyLocal = async () => {
     console.log('easyLocal')
     const targetDir = savePath.value || (await downloadDir())
+    loadingText(t('syncConfig') + '...')
     // build local
     invoke('build_local', {
         targetDir: targetDir,
         exeName: store.currentProject.showName,
         config: store.currentProject.more.windows,
+        base64Png:
+            platformName === 'macos'
+                ? store.currentProject.iconRound
+                    ? roundIcon.value
+                    : store.currentProject.icon
+                : store.currentProject.icon,
     })
+        .then((res) => {
+            console.log('build_local1 res', res)
+            loadingText(t('buildSuccess'))
+            oneMessage.success('本地打包成功')
+            buildLoading.value = false
+        })
+        .catch((error) => {
+            console.error('build_local2 error', error)
+            oneMessage.error(error)
+            warning.value = '本地打包失败' + ': ' + error
+        })
 }
 
 // new publish version
@@ -1662,9 +1684,6 @@ const publishWeb = async () => {
     // }
     const now = new Date()
     localStorage.setItem('lastClickTime', now.toISOString())
-    centerDialogVisible.value = false
-    buildLoading.value = true
-    loadingText(t('preCheck') + '...')
     try {
         // delete release
         store.isRelease && (await store.deleteRelease())
@@ -1710,16 +1729,21 @@ const publishWeb = async () => {
 
 // publish check
 const publishCheck = async () => {
+    centerDialogVisible.value = false
+    buildLoading.value = true
+    loadingText(t('preCheck') + '...')
     if (store.currentProject.desktop.buildMethod === 'local') {
         await easyLocal()
     } else if (store.token === '') {
         oneMessage.error(t('configToken'))
         return
-    } else if (checkLastPublish()) {
-        oneMessage.error(t('limitProject'))
-        return
     } else {
-        publishWeb()
+        if (checkLastPublish()) {
+            oneMessage.error(t('limitProject'))
+            return
+        } else {
+            publishWeb()
+        }
     }
 }
 
